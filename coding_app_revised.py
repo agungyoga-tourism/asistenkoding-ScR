@@ -32,7 +32,7 @@ def load_codebook_text() -> str:
     candidates: List[str] = []
     if cb_path:
         candidates.append(cb_path)
-    candidates.append("codebook.txt")
+    candidates.append("codebook_llm.txt")
 
     for path in candidates:
         try:
