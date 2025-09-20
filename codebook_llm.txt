@@ -1,0 +1,204 @@
+codebook_llm.txt — Tourism Village Codebook v1.1 — LLM Adapter (Operational)
+
+Purpose
+Standardise extraction/classification about tourism village / CBT at village scale. Output must strictly match the JSON schema used by the app. When unsure after two careful passes → set NA and explain briefly in notes. Never invent data.
+
+0) Output contract (must fill these fields exactly)
+
+Screening: inclusion_I1|I2|I3 (Yes|No|NA), exclusion_E1|E2 (Yes|No), scope_decision (Include|Exclude), scope_justification, unit_of_analysis (Village/community|Cluster of villages|Municipality/Region|Household/enterprise|Programme/policy|Other), optional rrn, literature_type, geographic_focus.
+
+Core: explicit_definition (Yes|Partial|No), verbatim_definition, typology_proposed (Yes|Partial|No), typology_details.
+
+Axes + anchors: axis_A (A1|A2|A3|NA), axis_B (B1|B2|B3|B4|NA), axis_C (C1|C2|C3|NA) + axis_A_anchor|axis_B_anchor|axis_C_anchor (page/section/figure/table).
+
+Outcomes (+ evidence): participation_level|equity_level|env_level (1|2|3|NA) + participation_evidence|equity_evidence|env_evidence (verbatim w/ anchor if level ≠ NA; else leave as brief “NA”).
+
+Optional: purpose_tokens (pipe, e.g., DEV|LIV|SUS), key_findings (2–4 lines), equity_tags, engagement_tags.
+
+QC: evidence_quality (Low|Moderate|High), inferred (Yes|No), notes, split_case (Yes|No).
+
+Hard rules
+
+If evidence missing for any non-NA outcome → downgrade to NA.
+
+If typology mentioned without explicit classes/criteria → set typology_proposed=Partial.
+
+If scope_decision=Exclude → set axis_A/B/C and all 3 outcome levels to NA.
+
+1) Screening & Scope (decide first)
+
+Inclusion (I1–I3)
+
+I1 Yes if the document engages with a village/community unit (Desa Wisata/CBT) or clearly equivalent.
+
+I2 Yes if peer-reviewed or substantial/official grey (gov/IGO/NGO, thesis).
+
+I3 Yes if there is a usable definition/typology/criteria/theoretical framing at village unit.
+
+Exclusion
+
+E1 Yes if the scale is regional/county/national with no analytic village module (or only single-firm/lodge without community governance).
+
+E2 Yes if non-scholarly/insubstantial (news/blog/op-ed/promo; inaccessible/retracted).
+
+Scope decision
+
+If unit is Municipality/Region and no village-level rules, governance, or outcome evidence, set scope_decision=Exclude, unit_of_analysis=Municipality/Region.
+
+Only set Include when the primary analytic unit is a village/community OR there is a clearly separated village sub-module (then code that part; set split_case=Yes if multiple distinct village cases).
+
+scope_justification: 1–2 lines + anchor (e.g., “county-wide scoring, no village governance info; Table 1 p. 41”).
+
+Heuristic cues
+
+Exclude likely: “administrative units scoring”, “county/regional potential”, no board/coop/bylaws/revenue share, only attractions inventory.
+
+Include likely: village coop/association/adat, MoU, posted price board, board seats, village rules, benefit distribution.
+
+2) Definitions & Typology
+
+Definition of “tourism village”
+
+Yes: explicit sentence/paragraph defining the construct → copy verbatim + page/section to verbatim_definition.
+
+Partial: eligibility/criteria acting as definition (e.g., accreditation checklist) without an explicit definitional sentence.
+
+No: not stated.
+
+Typology
+
+Yes: explicit classes with criteria/thresholds (e.g., Gold/Silver with numeric cutoffs) → list classes & rules in typology_details.
+
+Partial: grouping/scoring mentioned but criteria/rules unclear or absent.
+
+No: none.
+
+3) Axes (pick dominant; if unclear → NA)
+
+Axis A — Governance & ownership
+
+A1 State-led: government designs/owns/controls; community consultative at best.
+Cues: state-owned facilities, government programme dictates.
+
+A2 Co-managed: formal shared authority/ownership (MoU, joint board/committee) across state–community–NGO/private.
+Cues: joint committee, signed MoU, shared revenue rules.
+
+A3 Community-led: decision rights & surplus distribution primarily local (co-op/association/adat); state/private supportive/contractual.
+Cues: community coop sets rules/prices; posted price board.
+
+If no governance info at village level → A = NA.
+
+Axis B — Market orientation & product mix
+
+B1 Heritage-led: rituals/crafts/museums/living culture as core.
+
+B2 Nature-led: nature/agro-ecology/ecotourism core.
+
+B3 Mixed-portfolio: intentional blend with interpretation (culture + nature + agro).
+
+B4 Commodified/amenities-led: generic leisure/amenities; limited place-specific interpretation.
+
+If only an inventory of attractions without a clear product strategy → choose dominant if clear; else NA.
+
+Axis C — Sustainability performance orientation
+
+C1 Claimed/aspirational: rhetoric/commitments; no indicators/targets.
+
+C2 Process-based/criteria: adoption of codes/standards; audits; qualitative checks; limited metrics.
+
+C3 Measured/verified: quantitative indicators with baselines/targets or time-series; periodic reporting.
+
+Decision rule: any outcomes reported with data → C3.
+
+Anchors
+For each chosen axis (A/B/C ≠ NA), provide the anchor (page/section/figure/table) showing why.
+
+4) Outcomes (mandatory + evidence)
+
+Fields: participation_level, equity_level, env_level ∈ {1,2,3,NA} + evidence verbatim (if level ≠ NA).
+
+Participation continuity
+
+3 High: retention/set-outs ≥6 consecutive months OR clear narrative of predictable calendar over multiple cycles; loyalty mechanisms.
+
+2 Medium: recurrent but unstable (intermittent/seasonal; 3–5 consecutive months).
+
+1 Low: ad hoc/pilot/one-off; explicit “declined/faltered”.
+Evidence priority: numbers/time-series > figures/tables > sustained descriptive claims.
+
+Equity / benefit sharing
+
+3 High: decision representation (women/youth/marginalised seats), transparency (posted prices, MoUs), grievance channel, audited/quantified shares.
+
+2 Medium: inclusion programmes but power concentrated; some transparency; mixed benefits.
+
+1 Low: elite capture/exclusion; no transparency; grievances without remedy.
+Evidence priority: formal docs > programme descriptions > narrative anecdotes.
+
+Environmental performance
+
+3 High: indicators + trend (contamination ↓, savings ↑, habitat restored); audits/certifications.
+
+2 Medium: consistent 3R/visitor caps/composting; occasional measures.
+
+1 Low: no measures; ongoing issues; purely normative claims.
+Evidence priority: audited numbers > internal time-series > descriptive assertions.
+
+Mandatory QC
+If any of the three levels is 1/2/3 but evidence empty or “NA” → set that level to NA.
+
+5) Split-case rule
+
+If one document reports distinct village cases/models with separate definitions/typologies/outcomes, create multiple rows and set split_case=Yes on those rows.
+
+6) Algorithm (run in order)
+
+Screening & UA → decide scope_decision.
+
+If Exclude: set A/B/C & outcomes = NA; write short scope_justification; then proceed to minimal fields and finish.
+
+Definition & Typology → fill; if scoring without criteria → typology_proposed=Partial.
+
+Axes → pick dominant state; provide anchors; if unclear → NA.
+
+Outcomes → assign levels using rules above; add verbatim evidence + anchor.
+
+QC pass → enforce NA on missing evidence; ensure enums and anchors present; keep inferred=Yes only when strong contextual inference is used (justify in evidence).
+
+Notes → ≤2 lines (e.g., “county scoring only; no governance details”).
+
+7) Purpose & tags (optional)
+
+purpose_tokens (≤3): DEV (rural development) | LIV (livelihoods) | CON (conservation/heritage) | EQU (equity/inclusion) | GOV (decentralisation/empowerment) | MAR (market/branding) | RES (resilience) | SUS (sustainability).
+
+equity_tags: EQ-GEN, EQ-INC, EQ-BEN, EQ-GOV.
+
+engagement_tags: ENG-MSG, ENG-MED, ENG-MES, ENG-INC, ENG-BRD, ENG-MET.
+
+8) Minimal worked examples
+
+Example EXCLUDE (regional inventory / scoring)
+
+Signal: “administrative units scoring”, no village governance; county-level tables of potential.
+
+Output: scope_decision=Exclude; unit_of_analysis=Municipality/Region; axis_A/B/C=NA; outcomes=NA; typology_proposed=Partial (scoring mentioned, criteria not explicit).
+
+scope_justification: “county-wide scoring; no village governance info; Table 1 p. X”.
+
+Example INCLUDE (village coop ethnography)
+
+Signal: village cooperative sets prices/rules; posted price board; attendance logs since 2018.
+
+Output: axis_A=A3 (anchor: by-laws p.12), axis_B=B1 (festival & crafts p.7), axis_C=C3 (income share/time-series Fig.2).
+
+Outcomes: participation=3 (logs ≥6 months), equity=3 (women 40% board; MoU), env=3 (audited contamination ↓). Evidence = verbatim + page.
+
+9) Prohibited behaviours
+
+Do not paraphrase quotes in verbatim_…; copy exactly + page/section.
+
+Do not assume outcomes; prefer NA when thin.
+
+Do not upscale C2→C3 without numeric indicators.
+
+End of LLM Adapter
