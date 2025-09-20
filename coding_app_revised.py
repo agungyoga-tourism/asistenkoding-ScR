@@ -1,12 +1,12 @@
 # coding_app_revised.py
 # ------------------------------------------------------------
 # Streamlit app: Asisten Koding Otomatis — Codebook v1.1 compliant
-# Perubahan utama:
-# - Memuat Codebook otomatis dari file codebook.txt (tanpa input di UI)
-# - JSON-mode Gemini dengan response_schema (keluaran dijamin JSON valid)
-# - Skema mengikuti Minimal Reporting Checklist Codebook v1.1
-# - Menangani multi-row (split-case) -> antrian verifikasi
-# - Validasi enumerasi, ekspor CSV/JSON, dan pembersihan sesi
+# Perubahan kunci:
+# - TIDAK ada input Google API Key di UI.
+# - API key diambil otomatis dari st.secrets/env: GEMINI_API_KEY atau GOOGLE_API_KEY.
+# - Codebook dimuat otomatis dari file codebook.txt (atau secrets/env CODEBOOK_PATH).
+# - JSON-mode Gemini (response_schema) agar keluaran valid & patuh Codebook.
+# - Dukungan multi-row (split-case), validasi enumerasi, ekspor CSV/JSON.
 # ------------------------------------------------------------
 
 import os
@@ -31,13 +31,11 @@ def load_codebook_text() -> str:
     1) st.secrets['CODEBOOK_PATH'] atau env CODEBOOK_PATH (jika tersedia), jika tidak
     2) file 'codebook.txt' pada working directory.
     """
-    # 1) Secrets/env override
-    cb_path = st.secrets.get("CODEBOOK_PATH", os.environ.get("CODEBOOK_PATH", "")).strip()
+    cb_path = st.secrets.get("CODEBOOK_PATH", os.environ.get("CODEBOOK_PATH", "")).strip() if "CODEBOOK_PATH" in st.secrets or os.environ.get("CODEBOOK_PATH") else ""
     candidates: List[str] = []
     if cb_path:
         candidates.append(cb_path)
-    # 2) Default fallback
-    candidates.append("codebook.txt")
+    candidates.append("codebook.txt")  # fallback default
 
     for path in candidates:
         try:
@@ -48,26 +46,55 @@ def load_codebook_text() -> str:
         except FileNotFoundError:
             continue
         except Exception as e:
-            # Tampilkan error namun lanjut ke kandidat berikutnya
             st.warning(f"Gagal membaca Codebook dari '{path}': {e}")
 
-    # Jika gagal semua
     return ""
 
 CODEBOOK_TEXT = load_codebook_text()
 if not CODEBOOK_TEXT:
     st.error(
         "File **codebook.txt** tidak ditemukan atau kosong. "
-        "Simpan Codebook v1.1 lengkap sebagai `codebook.txt` di direktori aplikasi "
+        "Simpan Codebook v1.1 lengkap sebagai `codebook.txt` di direktori aplikasi, "
         "atau setel `st.secrets['CODEBOOK_PATH']` / env `CODEBOOK_PATH`."
+    )
+    st.stop()
+
+# =========================
+# API Key (tanpa UI)
+# =========================
+def get_api_key() -> str:
+    """
+    Mengambil API key dari:
+    - st.secrets['GEMINI_API_KEY'] atau st.secrets['GOOGLE_API_KEY']
+    - env GEMINI_API_KEY atau GOOGLE_API_KEY
+    """
+    key = st.secrets.get("GEMINI_API_KEY", None)
+    if not key:
+        key = st.secrets.get("GOOGLE_API_KEY", None)
+    if not key:
+        key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+    if not key:
+        st.error(
+            "Google API Key tidak ditemukan. Setel di `st.secrets['GEMINI_API_KEY']` "
+            "atau `st.secrets['GOOGLE_API_KEY']` (alternatif: env `GEMINI_API_KEY`/`GOOGLE_API_KEY`)."
+        )
+        st.stop()
+    return key
+
+# Validasi ketersediaan key di awal agar jelas
+_API_KEY_PRESENT = True if (st.secrets.get("GEMINI_API_KEY") or st.secrets.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")) else False
+if _API_KEY_PRESENT:
+    st.caption("✅ Google API Key terdeteksi dari secrets/env (tidak ditampilkan).")
+else:
+    st.error(
+        "Google API Key tidak terdeteksi. Tambahkan ke `st.secrets` atau environment "
+        "sebelum menjalankan pengodean."
     )
     st.stop()
 
 # =========================
 # Konstanta & Skema JSON
 # =========================
-
-# Skema JSON ketat sesuai Minimal Reporting Checklist Codebook v1.1
 SCHEMA: Dict[str, Any] = {
     "type": "object",
     "properties": {
@@ -125,7 +152,6 @@ SCHEMA: Dict[str, Any] = {
     "required": ["rows"]
 }
 
-# Konfigurasi generasi default
 DEFAULT_GENERATION_CONFIG: Dict[str, Any] = {
     "temperature": 0.2,
     "top_p": 0.9,
@@ -133,7 +159,6 @@ DEFAULT_GENERATION_CONFIG: Dict[str, Any] = {
     "response_schema": SCHEMA
 }
 
-# Kolom DataFrame sesi (sinkron dengan skema + original_text)
 COLUMNS: List[str] = [
     "explicit_definition", "verbatim_definition", "typology_proposed", "typology_details",
     "axis_A", "axis_B", "axis_C", "axis_A_anchor", "axis_B_anchor", "axis_C_anchor",
@@ -146,7 +171,6 @@ COLUMNS: List[str] = [
     "original_text"
 ]
 
-# Daftar enumerasi untuk validasi ringan di sisi app
 ENUMS: Dict[str, List[str]] = {
     "explicit_definition": ["Yes", "Partial", "No"],
     "typology_proposed": ["Yes", "Partial", "No"],
@@ -165,51 +189,44 @@ ENUMS: Dict[str, List[str]] = {
 # Utilitas
 # =========================
 def normalise_row(row: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Menjamin setiap row memiliki semua kolom (COLUMNS), nilai enum valid,
-    dan string kosong untuk field opsional yang hilang.
-    """
+    """Pastikan setiap row punya semua kolom & nilai enum valid."""
     out: Dict[str, Any] = {}
     for col in COLUMNS:
         val = row.get(col, "")
-        # Validasi enum bila ada
-        if col in ENUMS:
-            if val not in ENUMS[col]:
-                # fallback aman
-                if col in ["axis_A", "axis_B", "axis_C"]:
-                    val = "NA"
-                elif col in ["participation_level", "equity_level", "env_level"]:
-                    val = "NA"
-                elif col in ["explicit_definition", "typology_proposed"]:
-                    val = "No"
-                elif col == "evidence_quality":
-                    val = "Moderate"
-                elif col in ["inferred", "split_case"]:
-                    val = "No"
+        if col in ENUMS and val not in ENUMS[col]:
+            if col in ["axis_A", "axis_B", "axis_C"]:
+                val = "NA"
+            elif col in ["participation_level", "equity_level", "env_level"]:
+                val = "NA"
+            elif col in ["explicit_definition", "typology_proposed"]:
+                val = "No"
+            elif col == "evidence_quality":
+                val = "Moderate"
+            elif col in ["inferred", "split_case"]:
+                val = "No"
         out[col] = val
     return out
 
 
-def configure_genai(api_key: str) -> bool:
+def configure_genai() -> bool:
     try:
-        genai.configure(api_key=api_key)
+        genai.configure(api_key=get_api_key())
         return True
     except Exception as e:
-        st.error(f"Gagal mengonfigurasi API Google. Pastikan kunci API valid. Error: {e}")
+        st.error(f"Gagal mengonfigurasi API Google. Error: {e}")
         return False
 
 
 def generate_coding_draft(
     article_text: str,
     codebook_text: str,
-    api_key: str,
     model_name: str
 ) -> Optional[List[Dict[str, Any]]]:
     """
     Mengirim artikel + codebook ke Gemini dan memaksa keluaran JSON valid
     sesuai SCHEMA. Mengembalikan list[dict] rows (atau None jika gagal).
     """
-    if not configure_genai(api_key):
+    if not configure_genai():
         return None
 
     try:
@@ -278,7 +295,6 @@ ARTICLE:
                 pass
         return None
 
-
 # =========================
 # Inisialisasi Session State
 # =========================
@@ -293,24 +309,12 @@ if "coded_data" not in st.session_state:
 # Antarmuka Pengguna
 # =========================
 st.title("🤖 Asisten Koding Otomatis (AKO) — Codebook v1.1")
-
-st.info("Codebook dimuat otomatis dari **codebook.txt**.", icon="📖")
+st.info("Codebook dimuat otomatis dari **codebook.txt**. API Key diambil dari secrets/env.", icon="📖")
 
 input_col, config_col = st.columns([2, 1])
 
 with config_col:
     st.subheader("⚙️ Konfigurasi")
-
-    # API Key: prioritas dari input; jika kosong coba secrets/env
-    api_key_input = st.text_input(
-        "Masukkan Google API Key:",
-        type="password",
-        placeholder="AIzaSy... (disarankan gunakan st.secrets)",
-        help="Kunci ini tidak disimpan. Anda juga dapat menyetel st.secrets['GEMINI_API_KEY']."
-    )
-    if not api_key_input:
-        api_key_input = st.secrets.get("GEMINI_API_KEY", os.environ.get("GEMINI_API_KEY", ""))
-
     model_choice = st.radio(
         "Pilih Model Gemini:",
         options=["gemini-1.5-pro", "gemini-1.5-flash"],
@@ -329,18 +333,14 @@ with input_col:
     if st.button("Mulai Pengodean Otomatis", type="primary", use_container_width=True):
         if not article_input:
             st.warning("Harap masukkan teks artikel terlebih dahulu.")
-        elif not api_key_input:
-            st.warning("Harap masukkan Google API Key (atau set di st.secrets/env).")
         else:
             with st.spinner("AI sedang membaca dan mengodekan artikel..."):
                 rows = generate_coding_draft(
                     article_text=article_input,
                     codebook_text=CODEBOOK_TEXT,
-                    api_key=api_key_input,
                     model_name=model_choice
                 )
                 if rows:
-                    # Tambahkan original_text ke setiap row; normalisasi
                     q: List[Dict[str, Any]] = []
                     for r in rows:
                         r["original_text"] = article_input
@@ -358,13 +358,11 @@ st.markdown("---")
 # =========================
 if st.session_state.coding_result:
     st.header("✅ Verifikasi & Edit Hasil (Per Baris)")
-
     result = st.session_state.coding_result
 
     with st.form("verification_form"):
         st.subheader("Ringkasan Kunci")
 
-        # Enumerations untuk widget
         def_opts = ENUMS["explicit_definition"]
         axis_a_opts = ENUMS["axis_A"]
         axis_b_opts = ENUMS["axis_B"]
@@ -375,34 +373,16 @@ if st.session_state.coding_result:
         split_opts = ENUMS["split_case"]
 
         # --- Definitions & Typology
-        explicit_definition = st.selectbox(
-            "Explicit definition",
-            options=def_opts,
-            index=def_opts.index(result.get("explicit_definition", "No"))
-        )
-        verbatim_definition = st.text_area(
-            "Verbatim definition (quote + page/section)",
-            value=result.get("verbatim_definition", ""),
-            height=100
-        )
-        typology_proposed = st.selectbox(
-            "Typology proposed",
-            options=def_opts,
-            index=def_opts.index(result.get("typology_proposed", "No"))
-        )
-        typology_details = st.text_area(
-            "Typology details (classes + decision rules)",
-            value=result.get("typology_details", ""),
-            height=100
-        )
+        explicit_definition = st.selectbox("Explicit definition", def_opts, index=def_opts.index(result.get("explicit_definition", "No")))
+        verbatim_definition = st.text_area("Verbatim definition (quote + page/section)", value=result.get("verbatim_definition", ""), height=100)
+        typology_proposed = st.selectbox("Typology proposed", def_opts, index=def_opts.index(result.get("typology_proposed", "No")))
+        typology_details = st.text_area("Typology details (classes + decision rules)", value=result.get("typology_details", ""), height=100)
 
         # --- Axes + anchors
         axis_A = st.selectbox("Axis A — Governance & ownership", axis_a_opts, index=axis_a_opts.index(result.get("axis_A", "NA")))
         axis_A_anchor = st.text_input("Axis A anchor (page/figure/table ref.)", value=result.get("axis_A_anchor", ""))
-
         axis_B = st.selectbox("Axis B — Market orientation & product mix", axis_b_opts, index=axis_b_opts.index(result.get("axis_B", "NA")))
         axis_B_anchor = st.text_input("Axis B anchor (page/figure/table ref.)", value=result.get("axis_B_anchor", ""))
-
         axis_C = st.selectbox("Axis C — Sustainability performance", axis_c_opts, index=axis_c_opts.index(result.get("axis_C", "NA")))
         axis_C_anchor = st.text_input("Axis C anchor (page/figure/table ref.)", value=result.get("axis_C_anchor", ""))
 
@@ -413,26 +393,20 @@ if st.session_state.coding_result:
         # --- Outcomes + Evidence
         participation_level = st.selectbox("Participation level", lvl_opts, index=lvl_opts.index(result.get("participation_level", "NA")))
         participation_evidence = st.text_area("Participation evidence (verbatim + anchor)", value=result.get("participation_evidence", ""), height=120)
-
         equity_level = st.selectbox("Equity level", lvl_opts, index=lvl_opts.index(result.get("equity_level", "NA")))
         equity_evidence = st.text_area("Equity evidence (verbatim + anchor) — WAJIB", value=result.get("equity_evidence", ""), height=120)
-
         env_level = st.selectbox("Environmental level", lvl_opts, index=lvl_opts.index(result.get("env_level", "NA")))
         env_evidence = st.text_area("Environmental evidence (verbatim + anchor) — WAJIB", value=result.get("env_evidence", ""), height=120)
 
         # --- Tags & QC
         equity_tags = st.text_input("Equity tags (e.g., EQ-GEN|EQ-BEN)", value=result.get("equity_tags", ""))
         engagement_tags = st.text_input("Engagement tags (e.g., ENG-MED|ENG-MET)", value=result.get("engagement_tags", ""))
-
         evidence_quality = st.selectbox("Evidence quality", eq_quality_opts, index=eq_quality_opts.index(result.get("evidence_quality", "Moderate")))
         inferred = st.selectbox("Inferred?", yn_opts, index=yn_opts.index(result.get("inferred", "No")))
         notes = st.text_area("Notes (≤2 lines; explain NA or inference)", value=result.get("notes", ""), height=80)
-
         split_case = st.selectbox("Split-case row?", split_opts, index=split_opts.index(result.get("split_case", "No")))
 
-        # Tombol submit
         submitted = st.form_submit_button("Setuju & Simpan ke Sesi", use_container_width=True)
-
         if submitted:
             row: Dict[str, Any] = {
                 "explicit_definition": explicit_definition,
@@ -462,13 +436,11 @@ if st.session_state.coding_result:
                 "original_text": result.get("original_text", "")
             }
 
-            # Normalisasi & simpan
             row = normalise_row(row)
             row_df = pd.DataFrame([{col: row.get(col, "") for col in COLUMNS}])
             st.session_state.coded_data = pd.concat([st.session_state.coded_data, row_df], ignore_index=True)
 
             st.success("Baris tersimpan ke sesi.")
-            # Ambil row berikutnya jika ada
             if st.session_state.coding_queue:
                 st.session_state.coding_result = st.session_state.coding_queue.pop(0)
                 st.rerun()
@@ -483,7 +455,6 @@ if st.session_state.coding_result:
 if not st.session_state.coded_data.empty:
     st.markdown("---")
     st.header("🗂️ Data Terkode Sesi Ini")
-
     st.dataframe(st.session_state.coded_data, use_container_width=True)
 
     col1, col2, col3 = st.columns([1, 1, 1])
@@ -517,8 +488,8 @@ if not st.session_state.coded_data.empty:
 # Footer
 # =========================
 st.markdown(
-    "<hr/>"
-    "<small>Codebook dimuat dari <code>codebook.txt</code>. "
-    "Gunakan <code>st.secrets['CODEBOOK_PATH']</code> atau env <code>CODEBOOK_PATH</code> untuk mengarah ke file lain.</small>",
+    "<hr/><small>Codebook dimuat dari <code>codebook.txt</code>. "
+    "Setel lokasi alternatif via <code>st.secrets['CODEBOOK_PATH']</code> atau env <code>CODEBOOK_PATH</code>. "
+    "API key diambil dari <code>st.secrets</code> / env (<code>GEMINI_API_KEY</code>/<code>GOOGLE_API_KEY</code>).</small>",
     unsafe_allow_html=True
 )
