@@ -1,0 +1,199 @@
+Codebook v1.1 — Tourism Village Scoping Review
+(definitions, decision rules, boundary examples, and reliability steps — UK English)
+0) Purpose & general rules
+Aim. Standardise extraction and classification of evidence about tourism villages (incl. CBT and village-scale rural tourism) from academic and grey literature, so findings are reproducible and suitable for Q1-level analysis.
+Granularity. One row = one document. If a document reports multiple distinct village cases or models with separate definitions/typologies/outcomes, create additional rows (add “split-case” note).
+Evidence hierarchy. Prioritise: (1) explicit definition/statement; (2) figure/table/appendix; (3) methods details; (4) strong inference from results/discussion. If you infer, set inferred=Yes and cite the anchor.
+Verbatim fields. Copy exactly and include page/section (e.g., “…” p. 12; Fig. 2).
+Multi-value fields. Separate tokens with a pipe |.
+Ambiguity rule. After two careful passes, if still unclear, code “Not stated/NA” and explain briefly in notes.
+Scope safeguard. Exclude items that treat “rural tourism” at regional/national scale without a recognisable village/community unit of analysis.
+________________________________________
+1) Screening flags (audit trail)
+RRN. Source registry number (from master bibliography).
+Inclusion (I1–I3).
+•	I1 – Concept focus. Engages with tourism village (e.g., Desa Wisata), CBT at village/community unit, or directly equivalent constructs.
+•	I2 – Scholarly/credible. Peer-reviewed article or substantial/official grey (government, IGO/NGO, doctoral thesis).
+•	I3 – Conceptual utility. Provides a definition, typology, criteria, or conceptual/theoretical framing relevant to the village unit.
+Exclusion (E1–E2).
+•	E1 – Scale too broad/narrow. Regional branding with no village unit; or single firm/lodge only (no community governance).
+•	E2 – Non-scholarly/insubstantial. News/blog/op-ed/promotional brochure; inaccessible/retracted.
+Boundary examples.
+•	Provincial accreditation guideline with village-level criteria → likely include (I3).
+•	Single homestay case with no community rules/benefit arrangements → likely exclude (E1).
+________________________________________
+2) Study characteristics (Group 2)
+Literature type (controlled). Academic—Empirical; Academic—Review; Academic—Conceptual/Theoretical; Doctoral thesis; Government/Policy report; IGO/NGO toolkit/guide; Other credible grey.
+Type in details (free text). e.g., “panel survey + FGDs”; “ethnography; 14 months fieldwork”; “indicator framework”.
+Geographic focus. Country/region/village(s); use “Global” if applicable.
+Methodology/approach (controlled; multi allowed). Case study; Multiple-case; Survey; Ethnography; Participatory/Action research; Mixed methods; Modelling; Policy analysis; Literature review (scoping/systematic/narrative); Delphi/Expert; Indicator framework; Other.
+Unit of analysis (controlled; multi). Village/community; Cluster of villages; Municipality; Household/enterprise; Programme/policy.
+Note the primary unit in notes if multiple appear.
+Boundary hints.
+•	County-wide “rural destination” with tangential village mentions → Municipality/Region (likely E1 unless a village module is truly analytic).
+________________________________________
+3) Core extraction — Definitions & typologies (Group 3)
+Explicit definition of “tourism village” (Yes/Partial/No).
+•	Yes. A sentence/paragraph defining the construct (copy to verbatim_definition).
+•	Partial. Operational/eligibility criteria used as a definition (e.g., accreditation checklist).
+•	No. Not stated.
+Verbatim definition(s). Exact quotation + page/section.
+Definition components (thematic codes; multi).
+TERR (territorial/community unit) | GOV (community-led governance/participation) | OWN (local ownership/benefit capture) | LIV (livelihood/enterprise) | HER (cultural heritage/identity) | NAT (landscape/nature) | EXP (visitor experience/design) | SUS (sustainability/ethics) | NET (partnerships/networks) | ACC (accreditation/standards orientation).
+Typology proposed? (Yes/Partial/No).
+•	Yes. Explicit classes with criteria/thresholds.
+•	Partial. Grouping exists but criteria unclear.
+•	No.
+Typology details. List classes and decision rules (governance, product mix, indicators, thresholds).
+Purpose/function tokens (multi). DEV (rural development) | LIV (livelihoods) | CON (conservation/heritage) | EQU (equity/inclusion) | GOV (decentralisation/empowerment) | MAR (market/branding) | RES (resilience) | SUS (sustainability).
+Key arguments/findings; Gaps; Critical comments/linkages.
+Concise prose (2–4 lines per cell). Use “Linkages” to note dependence on well-known toolkits/handbooks.
+Boundary examples.
+•	UN award tiers with numeric thresholds → Typology = Yes; list thresholds.
+•	“Preserves culture” claim without mechanism → Purpose includes CON, note weak evidence in “Critical comments”.
+________________________________________
+4) Three-axis classification (synthesis backbone)
+Principle. Code what the document describes or prescribes, not your personal preference. If multiple states co-exist, pick the dominant (by page weight or emphasis) and mention alternatives in notes.
+Axis A — Governance & ownership (pick one; add a second with “|” only if truly co-equal)
+•	A1 State-led. Government designs/owns/controls; community consultative at best.
+Boundary: state-owned facilities with village volunteers → still A1.
+•	A2 Co-managed. Shared authority/ownership across state–community–NGO/private with formal arrangements (MoU, joint board/committee).
+Boundary: donor NGO + village committee + municipal permits → A2.
+•	A3 Community-led. Decision rights and surplus distribution primarily local (co-op/association/adat); state/private actors supportive/contractual.
+Boundary: community co-op sets rules/prices; municipality funds roads → A3.
+Axis B — Market orientation & product mix (pick one primary)
+•	B1 Heritage-led. Cultural/heritage core (rituals, crafts, museums, living culture).
+•	B2 Nature-led. Nature/agro-ecology/ecotourism (trekking, farmscapes, landscapes).
+•	B3 Mixed-portfolio. Intentional blend (culture + nature + agro; curated events).
+•	B4 Commodified/amenities-led. Generic leisure/amenities (homestays, F&B) with limited place-specific interpretation.
+Boundary: homestays + seasonal rituals with guided interpretation → likely B3 (not B4).
+Axis C — Sustainability performance orientation (evidence-based; pick one)
+•	C1 Claimed/aspirational. Rhetorical commitments; no indicators/targets.
+•	C2 Process-based/criteria. Adoption of codes/standards; qualitative audits; limited metrics.
+•	C3 Measured/verified. Quantitative indicators with baselines/targets and periodic reporting (e.g., income shares, participation continuity, environmental indicators).
+Decision rule: If outcomes are reported with data (even mixed), use C3.
+________________________________________
+5) New outcome variables (mandatory for association tests)
+Add the following columns to the master sheet:
+participation_level (1|2|3|NA) | equity_level (1|2|3|NA) | env_level (1|2|3|NA) | participation_evidence | equity_evidence | env_evidence.
+5.1 Participation continuity (1–3)
+Construct. Durability and regularity of resident/actor participation (beyond one-off events).
+•	3 High.
+Quantitative priority: retention/set-outs ≥6 consecutive months; repeat visitation high/stable; stated “consistent/steady” with schedules honoured.
+Qualitative fallback: predictable calendar + loyalty/continuity mechanisms reported over multiple cycles.
+•	2 Medium.
+Recurrent but unstable (intermittent/seasonal); 3–5 consecutive months; improvements followed by lapses.
+•	1 Low.
+Ad hoc/pilot/one-off; explicit “drop-out/decline/faltered”.
+Boundary examples.
+•	“Household set-outs ≥3 consecutive months for 72% of homes (FY2023)” → 3.
+•	“Attendance spikes during festivals; otherwise sporadic” → 2.
+•	“Trial weekend; no follow-up activities” → 1.
+Evidence anchors (priority order).
+Numbers/time-series > figure/table > sustained descriptive claims > opinions.
+5.2 Equity / benefit sharing (1–3)
+Construct. Distribution of benefits and voice across groups (gender, youth, marginalised, informal actors) plus transparency mechanisms.
+•	3 High.
+Decision representation (e.g., women/youth/Informal actors hold seats); revenue/pricing transparency (posted price bands; MoUs); grievance channel; any audited/quantified benefit shares.
+•	2 Medium.
+Partial inclusion (programmes exist but power concentrated); some transparency (reports without shares); benefits mixed/unequal.
+•	1 Low.
+Elite capture/exclusion; no transparency; documented grievances without remedy.
+Boundary examples.
+•	“Women’s co-op holds 40% board seats; MoU with vendors; grievance log” → 3.
+•	“Women as guides; decisions by village head” → 2.
+•	“Complaints of unfair access; no revenue data” → 1.
+Evidence anchors.
+Formal documents (statutes/MoUs/postings) > programme descriptions > narrative anecdotes.
+5.3 Environmental performance (1–3)
+Construct. Measured environmental management and outcomes.
+•	3 High.
+Indicators + trend (e.g., contamination rate ↓, energy/water savings ↑, habitat restoration metrics); audits/eco-certifications.
+•	2 Medium.
+Consistent green practices (3R, caps on visitors, composting) with occasional measures or localised improvements.
+•	1 Low.
+No measures; ongoing issues (litter/leakage/erosion); purely normative claims.
+Boundary examples.
+•	“Contamination fell 18%→9% in 12 months; annual audit” → 3.
+•	“Waste sorting and periodic clean-ups; no metrics” → 2.
+•	“Erosion persists; no plan/monitoring” → 1.
+Evidence anchors.
+Audited numbers > internal time-series > descriptive assertions.
+When to use NA. If the document provides no basis to classify (not even a qualitative signal), set the level to NA (do not guess). If you infer from strong contextual cues, assign a level, set inferred=Yes, and justify in the evidence field.
+________________________________________
+6) Equity & engagement tags (optional, for richer synthesis)
+Equity tags (multi). EQ-GEN (gendered roles/time/stipends); EQ-INC (marginalised inclusion); EQ-BEN (benefit sharing); EQ-GOV (voice/representation).
+Engagement tags (multi). ENG-MSG (message design); ENG-MED (medium mix); ENG-MES (messenger portfolio); ENG-INC (incentives); ENG-BRD (branding/identity); ENG-MET (metrics/dashboards).
+Example. Women manage bookings as unpaid admin → EQ-GEN; posted price board → EQ-BEN|ENG-MET.
+________________________________________
+7) Reliability, transparency, and QC
+Two-coder pilot (vital).
+•	Select 20–25 documents across types/regions.
+•	Both coders independently assign Axis A/B/C and the three outcomes.
+•	Compute Cohen’s κ per variable (target ≥0.65 acceptable, ≥0.75 good).
+•	Where κ falls short, add/clarify boundary examples and keyword cues (e.g., “sporadic/steady/declined”; “grievance”; “audit”; “contamination rate”).
+Batch extraction workflow.
+•	Process in batches of 10–15 documents.
+•	QC sample 20–30% per batch: verify that each coded level is supported by a direct quotation or figure/table reference.
+•	Lock (read-only) columns already QC-approved.
+Evidence quality (Low/Moderate/High).
+Judge clarity and documentation; justify briefly in notes.
+________________________________________
+8) Worked mini-examples (v1.1)
+Example A — Government accreditation guide (award tiers).
+•	Type: IGO/NGO toolkit; Method: Indicator framework; UA: Village/community.
+•	Definition: Partial (criteria act as definition). Components: TERR|GOV|SUS|ACC.
+•	Typology: Yes (Gold/Silver/Bronze) with numeric thresholds → list them.
+•	Axes: A1 (state/agency-led), B3 (mixed encouraged), C2 (criteria-based; no outcome data).
+•	Outcomes: participation_level=NA (no retention data); equity_level=2 if inclusion criteria exist without evidence of power/benefit share; env_level=2 if criteria require green practices.
+•	Tags: ENG-MET; EQ-BEN if price/posting clauses. Evidence anchors: pp./tables of criteria.
+Example B — Village CBT ethnography (co-operative).
+•	Type: Academic—Empirical (ethnography).
+•	Definition: Yes; Components: TERR|GOV|OWN|LIV|HER|EXP|SUS.
+•	Typology: No.
+•	Axes: A3, B1 (heritage-led), C3 if any measured outcomes; else C2/C1.
+•	Outcomes: quote attendance logs/“since 2018 calendar” → participation_level=3; board seats & posted prices → equity_level=3; waste audits → env_level=3.
+Example C — Regional branding concept (risk of E1).
+•	If no village unit, exclude (E1). If a dedicated village sub-module with criteria exists, code that content only and mark “split-case”.
+________________________________________
+9) Common pitfalls & how to avoid them
+•	Equating homestay cluster with a tourism village. Look for community rules/benefit arrangements; otherwise it is a firm-level case.
+•	Up-coding C3. “Having criteria” ≠ “measuring outcomes”. C3 requires indicators with baselines/targets or audited series.
+•	Over-using B3 (Mixed). Choose B3 only when the blend is intentional and interpreted; otherwise pick the dominant offer.
+•	Assuming community-led. Volunteer labour ≠ decision rights; check who sets rules/prices and who receives surplus.
+•	Forcing outcomes. If evidence is thin, choose NA; do not guess.
+________________________________________
+10) Minimal reporting checklist (per row)
+1.	Definition status (Yes/Partial/No) + verbatim quote & page.
+2.	Typology status + class labels & decision criteria.
+3.	Axes A–C with one-line justification and anchor (page/figure).
+4.	Purpose tokens (≤3) + 2–3 key arguments/findings.
+5.	Outcome levels (participation/equity/environment) + evidence (quote/figure).
+6.	Any equity/engagement tags.
+7.	Evidence quality + inferred flag (if used) + brief note.
+________________________________________
+11) Data validation lists (for your sheet)
+•	literature_type: Academic—Empirical; Academic—Review; Academic—Conceptual/Theoretical; Doctoral thesis; Government/Policy report; IGO/NGO toolkit/guide; Other credible grey
+•	methodology (multi allowed): Case study; Multiple-case; Survey; Ethnography; Participatory/Action research; Mixed methods; Modelling; Policy analysis; Literature review—systematic; Literature review—scoping; Literature review—narrative; Delphi/Expert; Indicator framework; Other
+•	unit_of_analysis (multi): Village/community; Cluster of villages; Municipality; Household/enterprise; Programme/policy
+•	explicit_definition: Yes; Partial; No
+•	typology_proposed: Yes; Partial; No
+•	axis_A: A1 State-led; A2 Co-managed; A3 Community-led
+•	axis_B: B1 Heritage-led; B2 Nature-led; B3 Mixed-portfolio; B4 Commodified/amenities-led
+•	axis_C: C1 Claimed/aspirational; C2 Process-based/criteria; C3 Measured/verified
+•	participation_level/equity_level/env_level: 1; 2; 3; NA
+•	evidence_quality: Low; Moderate; High
+•	inferred: Yes; No
+________________________________________
+12) Change log (v1.0 → v1.1)
+•	New mandatory outcomes: participation_level, equity_level, env_level (+ evidence fields).
+•	Sharper axis rules: clarified B3 vs B4; C-level thresholds; A-level decision rights vs volunteerism.
+•	Reliability section added: κ targets, batch QC protocol.
+•	Boundary examples expanded for all three outcomes and each axis.
+•	Validation lists provided for drop-downs.
+________________________________________
+How to use now
+1.	Add the three outcome columns (with evidence fields) and apply the validation lists.
+2.	Pilot-code 10–12 diverse documents using v1.1; reconcile disagreements; refine with 3–5 new boundary phrases if needed.
+3.	Run a 20–25 document κ test for Axis A/B/C + outcomes; note κ in a small reliability table.
+4.	Proceed to batch extraction and QC; then we can compute descriptives and association tests (χ², Cramér’s V, Spearman ρ) and draft the Results/Discussion text.
