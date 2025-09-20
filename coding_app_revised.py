@@ -1,15 +1,17 @@
 # coding_app_revised.py
 # ------------------------------------------------------------
 # Streamlit app: Asisten Koding Otomatis — Codebook v1.1 compliant
-# Fitur utama:
-# - Memaksa output JSON valid via Gemini JSON-mode (response_schema)
+# Perubahan utama:
+# - Memuat Codebook otomatis dari file codebook.txt (tanpa input di UI)
+# - JSON-mode Gemini dengan response_schema (keluaran dijamin JSON valid)
 # - Skema mengikuti Minimal Reporting Checklist Codebook v1.1
 # - Menangani multi-row (split-case) -> antrian verifikasi
-# - Validasi enumerasi dan ekspor CSV/JSON
+# - Validasi enumerasi, ekspor CSV/JSON, dan pembersihan sesi
 # ------------------------------------------------------------
 
 import os
 import json
+from typing import List, Optional, Dict, Any
 import pandas as pd
 import streamlit as st
 import google.generativeai as genai
@@ -20,11 +22,53 @@ import google.generativeai as genai
 st.set_page_config(page_title="Asisten Koding Otomatis — Codebook v1.1", layout="wide")
 
 # =========================
+# Memuat Codebook dari file
+# =========================
+@st.cache_data(show_spinner=False)
+def load_codebook_text() -> str:
+    """
+    Memuat Codebook dari:
+    1) st.secrets['CODEBOOK_PATH'] atau env CODEBOOK_PATH (jika tersedia), jika tidak
+    2) file 'codebook.txt' pada working directory.
+    """
+    # 1) Secrets/env override
+    cb_path = st.secrets.get("CODEBOOK_PATH", os.environ.get("CODEBOOK_PATH", "")).strip()
+    candidates: List[str] = []
+    if cb_path:
+        candidates.append(cb_path)
+    # 2) Default fallback
+    candidates.append("codebook.txt")
+
+    for path in candidates:
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                content = f.read().strip()
+                if content:
+                    return content
+        except FileNotFoundError:
+            continue
+        except Exception as e:
+            # Tampilkan error namun lanjut ke kandidat berikutnya
+            st.warning(f"Gagal membaca Codebook dari '{path}': {e}")
+
+    # Jika gagal semua
+    return ""
+
+CODEBOOK_TEXT = load_codebook_text()
+if not CODEBOOK_TEXT:
+    st.error(
+        "File **codebook.txt** tidak ditemukan atau kosong. "
+        "Simpan Codebook v1.1 lengkap sebagai `codebook.txt` di direktori aplikasi "
+        "atau setel `st.secrets['CODEBOOK_PATH']` / env `CODEBOOK_PATH`."
+    )
+    st.stop()
+
+# =========================
 # Konstanta & Skema JSON
 # =========================
 
 # Skema JSON ketat sesuai Minimal Reporting Checklist Codebook v1.1
-SCHEMA = {
+SCHEMA: Dict[str, Any] = {
     "type": "object",
     "properties": {
         "rows": {
@@ -81,8 +125,8 @@ SCHEMA = {
     "required": ["rows"]
 }
 
-# Konfigurasi generasi default (dapat diubah di runtime dengan memilih model)
-DEFAULT_GENERATION_CONFIG = {
+# Konfigurasi generasi default
+DEFAULT_GENERATION_CONFIG: Dict[str, Any] = {
     "temperature": 0.2,
     "top_p": 0.9,
     "response_mime_type": "application/json",
@@ -90,7 +134,7 @@ DEFAULT_GENERATION_CONFIG = {
 }
 
 # Kolom DataFrame sesi (sinkron dengan skema + original_text)
-COLUMNS = [
+COLUMNS: List[str] = [
     "explicit_definition", "verbatim_definition", "typology_proposed", "typology_details",
     "axis_A", "axis_B", "axis_C", "axis_A_anchor", "axis_B_anchor", "axis_C_anchor",
     "purpose_tokens", "key_findings",
@@ -103,7 +147,7 @@ COLUMNS = [
 ]
 
 # Daftar enumerasi untuk validasi ringan di sisi app
-ENUMS = {
+ENUMS: Dict[str, List[str]] = {
     "explicit_definition": ["Yes", "Partial", "No"],
     "typology_proposed": ["Yes", "Partial", "No"],
     "axis_A": ["A1 State-led", "A2 Co-managed", "A3 Community-led", "NA"],
@@ -117,22 +161,21 @@ ENUMS = {
     "split_case": ["Yes", "No"]
 }
 
-
 # =========================
 # Utilitas
 # =========================
-def normalise_row(row: dict) -> dict:
+def normalise_row(row: Dict[str, Any]) -> Dict[str, Any]:
     """
     Menjamin setiap row memiliki semua kolom (COLUMNS), nilai enum valid,
     dan string kosong untuk field opsional yang hilang.
     """
-    out = {}
+    out: Dict[str, Any] = {}
     for col in COLUMNS:
         val = row.get(col, "")
         # Validasi enum bila ada
         if col in ENUMS:
             if val not in ENUMS[col]:
-                # fallback aman: NA untuk level/axes; "No" untuk inferred/split_case jika kosong
+                # fallback aman
                 if col in ["axis_A", "axis_B", "axis_C"]:
                     val = "NA"
                 elif col in ["participation_level", "equity_level", "env_level"]:
@@ -147,22 +190,26 @@ def normalise_row(row: dict) -> dict:
     return out
 
 
-def configure_genai(api_key: str):
+def configure_genai(api_key: str) -> bool:
     try:
         genai.configure(api_key=api_key)
-        return True, ""
+        return True
     except Exception as e:
-        return False, str(e)
+        st.error(f"Gagal mengonfigurasi API Google. Pastikan kunci API valid. Error: {e}")
+        return False
 
 
-def generate_coding_draft(article_text: str, codebook: str, api_key: str, model_name: str) -> list | None:
+def generate_coding_draft(
+    article_text: str,
+    codebook_text: str,
+    api_key: str,
+    model_name: str
+) -> Optional[List[Dict[str, Any]]]:
     """
     Mengirim artikel + codebook ke Gemini dan memaksa keluaran JSON valid
     sesuai SCHEMA. Mengembalikan list[dict] rows (atau None jika gagal).
     """
-    ok, err = configure_genai(api_key)
-    if not ok:
-        st.error(f"Gagal mengonfigurasi API Google. Pastikan kunci API valid. Error: {err}")
+    if not configure_genai(api_key):
         return None
 
     try:
@@ -188,7 +235,7 @@ Rules:
 
 CODEBOOK:
 ---
-{codebook}
+{codebook_text}
 ---
 
 OUTPUT RULES:
@@ -201,9 +248,10 @@ ARTICLE:
 ---
     """.strip()
 
+    resp = None
     try:
         resp = model.generate_content(prompt)
-        raw_json = resp.text  # dijamin JSON string (response_mime_type="application/json")
+        raw_json = resp.text  # JSON string (response_mime_type="application/json")
         data = json.loads(raw_json)
 
         if not isinstance(data, dict) or "rows" not in data or not isinstance(data["rows"], list):
@@ -215,17 +263,19 @@ ARTICLE:
 
     except json.JSONDecodeError as e:
         st.error(f"Gagal parsing JSON dari respons AI. Error: {e}")
-        try:
-            st.text_area("Output mentah dari AI (menyebabkan kesalahan parsing):", resp.text, height=200)
-        except Exception:
-            pass
+        if resp is not None:
+            try:
+                st.text_area("Output mentah dari AI (menyebabkan kesalahan parsing):", resp.text, height=200)
+            except Exception:
+                pass
         return None
     except Exception as e:
         st.error(f"Kesalahan saat berinteraksi dengan API: {e}")
-        try:
-            st.text_area("Output mentah dari AI:", resp.text, height=200)
-        except Exception:
-            pass
+        if resp is not None:
+            try:
+                st.text_area("Output mentah dari AI:", resp.text, height=200)
+            except Exception:
+                pass
         return None
 
 
@@ -239,24 +289,19 @@ if "coding_result" not in st.session_state:
 if "coded_data" not in st.session_state:
     st.session_state.coded_data = pd.DataFrame(columns=COLUMNS)
 
-
 # =========================
 # Antarmuka Pengguna
 # =========================
 st.title("🤖 Asisten Koding Otomatis (AKO) — Codebook v1.1")
 
-st.write(
-    "Aplikasi ini membantu ekstraksi dan klasifikasi bukti tentang **tourism villages** "
-    "secara **ketat** sesuai *Codebook v1.1*. Gunakan tombol di bawah untuk menjalankan "
-    "pengodean otomatis, lalu verifikasi setiap baris hasil."
-)
+st.info("Codebook dimuat otomatis dari **codebook.txt**.", icon="📖")
 
 input_col, config_col = st.columns([2, 1])
 
 with config_col:
     st.subheader("⚙️ Konfigurasi")
 
-    # API Key: prioritas dari input; jika kosong coba secrets/env (opsional)
+    # API Key: prioritas dari input; jika kosong coba secrets/env
     api_key_input = st.text_input(
         "Masukkan Google API Key:",
         type="password",
@@ -273,22 +318,6 @@ with config_col:
         help="Pilih Pro untuk akurasi; Flash untuk kecepatan."
     )
 
-    st.subheader("📖 Codebook")
-    default_codebook = (
-        "Paste Codebook v1.1 — Tourism Village Scoping Review di sini.\n"
-        "Gunakan versi lengkap agar pengodean 100% patuh.\n\n"
-        "Contoh ringkas (placeholder):\n"
-        "- Axis A/B/C (definisi & boundary)\n"
-        "- Outcomes (participation/equity/env) + evidence hierarchy\n"
-        "- Minimal reporting checklist\n"
-        "- Validation lists\n"
-    )
-    codebook_input = st.text_area(
-        "Codebook (tempel versi lengkap):",
-        value=default_codebook,
-        height=350
-    )
-
 with input_col:
     st.subheader("📄 Teks Artikel")
     article_input = st.text_area(
@@ -302,19 +331,17 @@ with input_col:
             st.warning("Harap masukkan teks artikel terlebih dahulu.")
         elif not api_key_input:
             st.warning("Harap masukkan Google API Key (atau set di st.secrets/env).")
-        elif not codebook_input or codebook_input.strip().lower().startswith("paste codebook"):
-            st.warning("Harap tempel Codebook v1.1 lengkap untuk hasil yang patuh.")
         else:
             with st.spinner("AI sedang membaca dan mengodekan artikel..."):
                 rows = generate_coding_draft(
                     article_text=article_input,
-                    codebook=codebook_input,
+                    codebook_text=CODEBOOK_TEXT,
                     api_key=api_key_input,
                     model_name=model_choice
                 )
                 if rows:
                     # Tambahkan original_text ke setiap row; normalisasi
-                    q = []
+                    q: List[Dict[str, Any]] = []
                     for r in rows:
                         r["original_text"] = article_input
                         q.append(normalise_row(r))
@@ -323,7 +350,6 @@ with input_col:
                     st.success(f"AI menghasilkan {len(rows)} baris. Silakan verifikasi baris pertama di bawah.")
                 else:
                     st.error("Tidak ada baris yang dihasilkan atau JSON tidak valid.")
-
 
 st.markdown("---")
 
@@ -408,7 +434,7 @@ if st.session_state.coding_result:
         submitted = st.form_submit_button("Setuju & Simpan ke Sesi", use_container_width=True)
 
         if submitted:
-            row = {
+            row: Dict[str, Any] = {
                 "explicit_definition": explicit_definition,
                 "verbatim_definition": verbatim_definition,
                 "typology_proposed": typology_proposed,
@@ -492,7 +518,7 @@ if not st.session_state.coded_data.empty:
 # =========================
 st.markdown(
     "<hr/>"
-    "<small>Tips: Untuk kepatuhan penuh, tempel Codebook v1.1 lengkap. "
-    "Tandai baris dengan <em>inferred='Yes'</em> atau <em>evidence_quality='Low'</em> untuk prioritas QC.</small>",
+    "<small>Codebook dimuat dari <code>codebook.txt</code>. "
+    "Gunakan <code>st.secrets['CODEBOOK_PATH']</code> atau env <code>CODEBOOK_PATH</code> untuk mengarah ke file lain.</small>",
     unsafe_allow_html=True
 )
