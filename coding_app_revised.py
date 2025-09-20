@@ -1,15 +1,17 @@
-# coding_app_revised.py (v1.2 — Strict QC)
+# coding_app_revised.py — Strict QC (Gemini 2.5 + Fallback)
 # ------------------------------------------------------------
 # Asisten Koding Otomatis — patuh Codebook v1.1 dengan QC ketat
 # - Codebook otomatis dari codebook.txt (atau secrets/env CODEBOOK_PATH)
 # - API key otomatis dari secrets/env (GEMINI_API_KEY/GOOGLE_API_KEY)
-# - JSON-mode Gemini (response_schema) -> keluaran JSON valid
-# - Screening & Scope fields + QC otomatis (auto-NA bila evidence kosong)
+# - Model 2.5 (Pro/Flash/Flash-Lite) + fallback cerdas & deteksi kuota 429 limit:0
+# - JSON-mode (response_schema) -> keluaran JSON valid
+# - Screening & Scope fields; QC otomatis (auto-NA bila evidence kosong)
 # - Multi-row (split-case), verifikasi per baris, ekspor CSV/JSON
 # ------------------------------------------------------------
 
-import os, json
-from typing import List, Optional, Dict, Any
+import os
+import json
+from typing import List, Optional, Dict, Any, Tuple
 import pandas as pd
 import streamlit as st
 import google.generativeai as genai
@@ -26,7 +28,11 @@ def load_codebook_text() -> str:
         cb_path = str(st.secrets["CODEBOOK_PATH"]).strip()
     elif os.environ.get("CODEBOOK_PATH"):
         cb_path = os.environ.get("CODEBOOK_PATH").strip()
-    candidates: List[str] = [p for p in [cb_path, "codebook.txt"] if p]
+
+    candidates: List[str] = []
+    if cb_path:
+        candidates.append(cb_path)
+    candidates.append("codebook.txt")
 
     for path in candidates:
         try:
@@ -74,7 +80,7 @@ SCHEMA: Dict[str, Any] = {
                 "type": "object",
                 "properties": {
 
-                    # --- (NEW) Group 1: Screening & Scope ---
+                    # --- Group 1: Screening & Scope ---
                     "rrn": {"type": "string"},
                     "inclusion_I1": {"type": "string", "enum": ["Yes","No","NA"]},
                     "inclusion_I2": {"type": "string", "enum": ["Yes","No","NA"]},
@@ -234,7 +240,7 @@ def apply_qc_rules(row: Dict[str, Any]) -> Dict[str, Any]:
         td = (row.get("typology_details") or "").lower()
         if ("not explicit" in td) or ("tidak eksplisit" in td) or (len(td) < 40):
             row["typology_proposed"] = "Partial"
-            notes.append("Typology set to Partial (criteria unclear in text).")
+            notes.append("Typology set to Partial (criteria unclear).")
 
     # 3) Scope: if Exclude -> axes & outcomes NA
     if row.get("scope_decision") == "Exclude":
@@ -255,6 +261,19 @@ def apply_qc_rules(row: Dict[str, Any]) -> Dict[str, Any]:
 
     return normalise_row(row)
 
+def is_free_tier_quota_zero_error(err: Exception) -> bool:
+    msg = str(err).lower()
+    return ("429" in msg) and ("quota" in msg) and ("limit: 0" in msg)
+
+def quota_help_box(model_tried: str):
+    with st.expander("❓ Bantuan: Mengatasi error kuota (429 limit: 0)", expanded=True):
+        st.markdown(
+            f"- Project Anda tidak punya kuota **free-tier** untuk **{model_tried}**.\n"
+            f"- **Coba model lain**: *gemini-2.5-flash* atau *gemini-2.5-flash-lite*.\n"
+            f"- Atau **aktifkan billing/kuota** di Google AI Studio/Vertex AI untuk model yang ingin dipakai.\n"
+            f"- Pastikan API key berasal dari project yang benar (punya kuota)."
+        )
+
 def configure_genai() -> bool:
     try:
         genai.configure(api_key=get_api_key())
@@ -263,13 +282,30 @@ def configure_genai() -> bool:
         st.error(f"Gagal mengonfigurasi API Google: {e}")
         return False
 
-def generate_coding_draft(article_text: str, codebook_text: str, model_name: str) -> Optional[List[Dict[str, Any]]]:
+def _fallback_order_for(model_name: str) -> List[str]:
+    # Fallback sesuai dua profil yang disepakati
+    if model_name == "gemini-2.5-pro":
+        return ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"]
+    if model_name == "gemini-2.5-flash":
+        return ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-pro"]
+    # default (flash-lite atau lainnya)
+    return ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.5-pro"]
+
+def generate_coding_draft(
+    article_text: str,
+    codebook_text: str,
+    model_name: str
+) -> Optional[Tuple[List[Dict[str, Any]], str]]:
+    """
+    Panggil Gemini dengan JSON-mode sesuai SCHEMA.
+    Fallback urutan:
+      - Pro -> Flash -> Flash-Lite
+      - Flash -> Flash-Lite -> Pro
+      - Flash-Lite -> Flash -> Pro
+    Jika 429 & limit=0: langsung coba model berikutnya (tanpa retry).
+    Return: (rows, used_model) atau None.
+    """
     if not configure_genai():
-        return None
-    try:
-        model = genai.GenerativeModel(model_name=model_name, generation_config=DEFAULT_GENERATION_CONFIG)
-    except Exception as e:
-        st.error(f"Gagal inisialisasi model {model_name}: {e}")
         return None
 
     prompt = f"""
@@ -284,10 +320,6 @@ Rules:
 - Use pipe '|' for multi-value tokens (e.g., purpose_tokens, tags).
 - If evidence is insufficient after two careful passes, choose 'NA' and explain briefly in 'notes'.
 - If you infer from strong contextual cues, set inferred='Yes' and justify in the relevant *_evidence.
-
-CODEBOOK (abridged reminder from file, full text provided below):
-- Inclusion (I1–I3), Exclusion (E1–E2), Scope safeguard (village/community unit).
-- Minimal reporting checklist; Axes A/B/C; Outcomes with evidence hierarchy.
 
 CODEBOOK FULL:
 ---
@@ -304,26 +336,35 @@ ARTICLE:
 ---
     """.strip()
 
-    resp = None
-    try:
-        resp = model.generate_content(prompt)
-        raw_json = resp.text
-        data = json.loads(raw_json)
-        if not isinstance(data, dict) or "rows" not in data or not isinstance(data["rows"], list):
-            st.error("Struktur JSON tidak sesuai (objek dengan key 'rows' berupa list).")
-            st.text_area("Output mentah dari AI:", raw_json, height=200)
-            return None
-        return data["rows"]
-    except json.JSONDecodeError as e:
-        st.error(f"Gagal parsing JSON: {e}")
-        if resp is not None:
-            st.text_area("Output mentah dari AI:", resp.text, height=200)
-        return None
-    except Exception as e:
-        st.error(f"Kesalahan saat berinteraksi dengan API: {e}")
-        if resp is not None:
-            st.text_area("Output mentah dari AI:", resp.text, height=200)
-        return None
+    last_err: Optional[Exception] = None
+    for model_try in _fallback_order_for(model_name):
+        try:
+            model = genai.GenerativeModel(model_name=model_try, generation_config=DEFAULT_GENERATION_CONFIG)
+            resp = model.generate_content(prompt)
+            raw_json = resp.text  # JSON string (response_mime_type="application/json")
+            data = json.loads(raw_json)
+
+            if not isinstance(data, dict) or "rows" not in data or not isinstance(data["rows"], list):
+                st.error(f"Struktur JSON tidak sesuai saat memakai **{model_try}**.")
+                st.text_area("Output mentah dari AI:", raw_json, height=200)
+                return None
+
+            return data["rows"], model_try
+
+        except Exception as e:
+            last_err = e
+            if is_free_tier_quota_zero_error(e):
+                st.warning(f"429 limit:0 pada **{model_try}** → mencoba fallback berikutnya…")
+                continue
+            else:
+                st.error(f"Kesalahan saat memakai **{model_try}**: {e}")
+                return None
+
+    st.error("Tidak bisa menghasilkan output karena kuota/akses semua model yang dicoba gagal.")
+    if last_err:
+        quota_help_box(_fallback_order_for(model_name)[0])
+        st.text_area("Detail error terakhir:", str(last_err), height=160)
+    return None
 
 # =========================
 # Session State
@@ -345,11 +386,12 @@ left, right = st.columns([2,1])
 
 with right:
     st.subheader("⚙️ Konfigurasi")
+    MODEL_OPTIONS = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.5-flash-lite"]
     model_choice = st.radio(
         "Pilih Model Gemini:",
-        options=["gemini-1.5-pro","gemini-1.5-flash"],
-        index=0,
-        help="Pro untuk akurasi; Flash untuk kecepatan."
+        options=MODEL_OPTIONS,
+        index=0,  # default: 2.5 Flash (efisien & kuota biasanya lebih longgar)
+        help="2.5 Pro = akurasi/penalaran tinggi; 2.5 Flash = efisien; Flash-Lite = paling hemat biaya."
     )
 
 with left:
@@ -364,8 +406,9 @@ with left:
             st.warning("Masukkan teks artikel terlebih dahulu.")
         else:
             with st.spinner("AI sedang membaca & mengodekan..."):
-                rows = generate_coding_draft(article_text=article_input, codebook_text=CODEBOOK_TEXT, model_name=model_choice)
-                if rows:
+                result = generate_coding_draft(article_text=article_input, codebook_text=CODEBOOK_TEXT, model_name=model_choice)
+                if result:
+                    rows, used_model = result
                     q: List[Dict[str, Any]] = []
                     for r in rows:
                         r["original_text"] = article_input
@@ -375,6 +418,7 @@ with left:
                     st.session_state.coding_queue = q
                     st.session_state.coding_result = st.session_state.coding_queue.pop(0)
                     st.success(f"AI menghasilkan {len(rows)} baris. Verifikasi baris pertama di bawah.")
+                    st.caption(f"Model aktif: {used_model}")
                 else:
                     st.error("Tidak ada baris yang dihasilkan / JSON tidak valid.")
 
@@ -389,8 +433,9 @@ if st.session_state.coding_result:
 
     with st.form("verification_form"):
         st.subheader("Screening & Scope")
-        inc_opts = ENUMS["inclusion_I1"]; exc_opts = ENUMS["exclusion_E1"]
-        scope_opts = ENUMS["scope_decision"]; ua_opts = ENUMS["unit_of_analysis"]
+        inc_opts = ENUMS["inclusion_I1"]
+        scope_opts = ENUMS["scope_decision"]
+        ua_opts = ENUMS["unit_of_analysis"]
 
         rrn = st.text_input("RRN (opsional)", value=r.get("rrn",""))
         inclusion_I1 = st.selectbox("I1 Concept focus (village/CBT unit)", inc_opts, index=inc_opts.index(r.get("inclusion_I1","NA")))
@@ -509,6 +554,6 @@ st.markdown(
     "<hr/><small>Codebook dari <code>codebook.txt</code>. Lokasi alternatif: "
     "<code>st.secrets['CODEBOOK_PATH']</code> atau env <code>CODEBOOK_PATH</code>. "
     "API key dari secrets/env (<code>GEMINI_API_KEY</code>/<code>GOOGLE_API_KEY</code>). "
-    "Strict QC aktif.</small>",
+    "Strict QC aktif. Model 2.5 (Pro/Flash/Flash-Lite) dengan fallback cerdas.</small>",
     unsafe_allow_html=True
 )
