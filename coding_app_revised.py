@@ -1,12 +1,14 @@
 # coding_app_revised.py — Strict QC (Gemini 2.5 + Fallback)
 # ------------------------------------------------------------
 # Asisten Koding Otomatis — patuh Codebook v1.1 dengan QC ketat
-# - Codebook otomatis dari codebook.txt (atau secrets/env CODEBOOK_PATH)
+# - Codebook otomatis dari codebook_llm.txt (atau secrets/env CODEBOOK_PATH)
 # - API key otomatis dari secrets/env (GEMINI_API_KEY/GOOGLE_API_KEY)
 # - Model 2.5 (Pro/Flash/Flash-Lite) + fallback cerdas & deteksi kuota 429 limit:0
 # - JSON-mode (response_schema) -> keluaran JSON valid
 # - Screening & Scope fields; QC otomatis (auto-NA bila evidence kosong)
 # - Multi-row (split-case), verifikasi per baris, ekspor CSV/JSON
+# - Patch: isi "NA" untuk kolom teks kosong, konsistensi anchors/evidence,
+#          dan sanitasi DataFrame sebelum tampil/ekspor.
 # ------------------------------------------------------------
 
 import os
@@ -32,7 +34,7 @@ def load_codebook_text() -> str:
     candidates: List[str] = []
     if cb_path:
         candidates.append(cb_path)
-    candidates.append("codebook_llm.txt")
+    candidates.append("codebook_llm.txt")  # default LLM adapter file
 
     for path in candidates:
         try:
@@ -48,7 +50,7 @@ def load_codebook_text() -> str:
 
 CODEBOOK_TEXT = load_codebook_text()
 if not CODEBOOK_TEXT:
-    st.error("File **codebook.txt** tidak ditemukan/kosong. Letakkan Codebook v1.1 lengkap di direktori app atau set CODEBOOK_PATH.")
+    st.error("File **codebook_llm.txt** tidak ditemukan/kosong. Letakkan file di direktori app atau set CODEBOOK_PATH.")
     st.stop()
 
 # =========================
@@ -199,6 +201,25 @@ ENUMS: Dict[str, List[str]] = {
 # =========================
 # Utils & QC rules
 # =========================
+
+# Kolom teks yang WAJIB diisi "NA" jika kosong
+FILL_AS_NA = [
+    "rrn",
+    "verbatim_definition", "typology_details",
+    "axis_A_anchor", "axis_B_anchor", "axis_C_anchor",
+    "purpose_tokens", "key_findings",
+    "participation_evidence", "equity_evidence", "env_evidence",
+    "equity_tags", "engagement_tags",
+    "scope_justification", "notes"
+]
+
+def fill_na_strings(row: Dict[str, Any]) -> Dict[str, Any]:
+    for col in FILL_AS_NA:
+        val = (row.get(col) or "").strip()
+        if val == "":
+            row[col] = "NA"
+    return row
+
 def normalise_row(row: Dict[str, Any]) -> Dict[str, Any]:
     out: Dict[str, Any] = {}
     for col in COLUMNS:
@@ -227,38 +248,60 @@ def normalise_row(row: Dict[str, Any]) -> Dict[str, Any]:
 def apply_qc_rules(row: Dict[str, Any]) -> Dict[str, Any]:
     notes: List[str] = []
 
-    # 1) Outcome evidence required: downgrade to NA if evidence empty/NA
+    # 0) Normalisasi awal enum agar tidak blank
+    row = normalise_row(row)
+
+    # 1) Outcomes: bila level 1/2/3 tapi evidence kosong/NA -> turunkan ke NA
     for var in ["participation","equity","env"]:
         lvl = (row.get(f"{var}_level") or "NA").strip()
-        ev = (row.get(f"{var}_evidence") or "").strip()
+        ev  = (row.get(f"{var}_evidence") or "").strip()
         if lvl in ["1","2","3"] and (ev == "" or ev.upper() == "NA"):
             row[f"{var}_level"] = "NA"
             notes.append(f"Auto-NA {var} (no evidence).")
 
-    # 2) Typology: set Partial if criteria unclear
+    # 2) Setelah penentuan level, konsistensi evidence: jika level == NA -> evidence = "NA"
+    for var in ["participation","equity","env"]:
+        lvl = (row.get(f"{var}_level") or "NA").strip()
+        if lvl == "NA":
+            if not (row.get(f"{var}_evidence") or "").strip():
+                row[f"{var}_evidence"] = "NA"
+
+    # 3) Typology: set Partial jika kriteria/rules tidak jelas/pendek
     if row.get("typology_proposed") == "Yes":
         td = (row.get("typology_details") or "").lower()
         if ("not explicit" in td) or ("tidak eksplisit" in td) or (len(td) < 40):
             row["typology_proposed"] = "Partial"
             notes.append("Typology set to Partial (criteria unclear).")
 
-    # 3) Scope: if Exclude -> axes & outcomes NA
+    # 4) Scope: jika Exclude -> axes & outcomes NA + anchors/evidence NA
     if row.get("scope_decision") == "Exclude":
         for k in ["axis_A","axis_B","axis_C","participation_level","equity_level","env_level"]:
+            row[k] = "NA"
+        for k in ["axis_A_anchor","axis_B_anchor","axis_C_anchor",
+                  "participation_evidence","equity_evidence","env_evidence"]:
             row[k] = "NA"
         row["evidence_quality"] = row.get("evidence_quality") or "Low"
         notes.append("Excluded (scope): axes & outcomes set to NA.")
 
-    # 4) Axis anchors sanity: if axis != NA but no anchor, flag
+    # 5) Anchors: jika axis == NA -> anchor = "NA"; jika axis ≠ NA tapi anchor kosong -> isi "NA" + catatan
     for ax in ["A","B","C"]:
-        if row.get(f"axis_{ax}") and row.get(f"axis_{ax}") != "NA":
-            if not (row.get(f"axis_{ax}_anchor") or "").strip():
+        axis_val = (row.get(f"axis_{ax}") or "NA").strip()
+        anchor   = (row.get(f"axis_{ax}_anchor") or "").strip()
+        if axis_val == "NA":
+            row[f"axis_{ax}_anchor"] = "NA"
+        else:
+            if anchor == "":
+                row[f"axis_{ax}_anchor"] = "NA"
                 notes.append(f"Axis {ax} lacks anchor.")
 
-    # Append notes
+    # 6) Isi "NA" untuk kolom teks wajib bila kosong
+    row = fill_na_strings(row)
+
+    # 7) Simpan catatan QC
     if notes:
         row["notes"] = (row.get("notes","") + (" " if row.get("notes") else "") + "; ".join(notes)).strip()
 
+    # 8) Normalisasi final (jaga enum valid)
     return normalise_row(row)
 
 def is_free_tier_quota_zero_error(err: Exception) -> bool:
@@ -380,7 +423,7 @@ if "coded_data" not in st.session_state:
 # UI
 # =========================
 st.title("🤖 Asisten Koding Otomatis (AKO) — Codebook v1.1 (Strict QC)")
-st.info("Codebook dimuat dari **codebook.txt**. API Key via secrets/env. QC ketat aktif (auto-NA bila evidence kosong).", icon="📖")
+st.info("Codebook dimuat dari **codebook_llm.txt** (atau path di CODEBOOK_PATH). API Key via secrets/env. QC ketat aktif (auto-NA & konsistensi anchors/evidence).", icon="📖")
 
 left, right = st.columns([2,1])
 
@@ -413,7 +456,7 @@ with left:
                     for r in rows:
                         r["original_text"] = article_input
                         r = normalise_row(r)
-                        r = apply_qc_rules(r)  # QC ketat
+                        r = apply_qc_rules(r)  # QC ketat (isi NA, anchors/evidence konsisten)
                         q.append(r)
                     st.session_state.coding_queue = q
                     st.session_state.coding_result = st.session_state.coding_queue.pop(0)
@@ -525,19 +568,32 @@ if st.session_state.coding_result:
                 st.rerun()
 
 # =========================
-# Data & Export
+# Data & Export (sanitasi anti-kosong)
 # =========================
+def sanitize_df_for_output(df: pd.DataFrame) -> pd.DataFrame:
+    # Pastikan tidak ada NaN dan string kosong
+    out = df.copy()
+    out = out.fillna("NA")
+    # Ganti string kosong "" menjadi "NA" untuk seluruh kolom kecuali original_text
+    for col in out.columns:
+        if col == "original_text":
+            continue
+        out[col] = out[col].apply(lambda x: ("NA" if isinstance(x, str) and x.strip() == "" else x))
+    return out
+
 if not st.session_state.coded_data.empty:
     st.markdown("---")
     st.header("🗂️ Data Terkode Sesi Ini")
-    st.dataframe(st.session_state.coded_data, use_container_width=True)
+
+    display_df = sanitize_df_for_output(st.session_state.coded_data)
+    st.dataframe(display_df, use_container_width=True)
 
     c1, c2, c3 = st.columns(3)
     with c1:
-        csv_bytes = st.session_state.coded_data.to_csv(index=False).encode("utf-8")
+        csv_bytes = display_df.to_csv(index=False).encode("utf-8")
         st.download_button("⬇️ Unduh CSV", data=csv_bytes, file_name="coded_data.csv", mime="text/csv", use_container_width=True)
     with c2:
-        json_bytes = st.session_state.coded_data.to_json(orient="records", force_ascii=False).encode("utf-8")
+        json_bytes = display_df.to_json(orient="records", force_ascii=False).encode("utf-8")
         st.download_button("⬇️ Unduh JSON (records)", data=json_bytes, file_name="coded_data.json", mime="application/json", use_container_width=True)
     with c3:
         if st.button("🧹 Bersihkan Data Sesi", use_container_width=True):
@@ -551,9 +607,9 @@ if not st.session_state.coded_data.empty:
 # Footer
 # =========================
 st.markdown(
-    "<hr/><small>Codebook dari <code>codebook.txt</code>. Lokasi alternatif: "
+    "<hr/><small>Codebook dari <code>codebook_llm.txt</code>. Lokasi alternatif: "
     "<code>st.secrets['CODEBOOK_PATH']</code> atau env <code>CODEBOOK_PATH</code>. "
     "API key dari secrets/env (<code>GEMINI_API_KEY</code>/<code>GOOGLE_API_KEY</code>). "
-    "Strict QC aktif. Model 2.5 (Pro/Flash/Flash-Lite) dengan fallback cerdas.</small>",
+    "Strict QC aktif + anti-sel-kosong. Model 2.5 (Pro/Flash/Flash-Lite) dengan fallback cerdas.</small>",
     unsafe_allow_html=True
 )
